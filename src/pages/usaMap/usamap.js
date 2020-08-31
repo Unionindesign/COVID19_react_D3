@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { json, scaleThreshold } from "d3"; //select, geoPath, geoAlbers
+import _ from "lodash";
 import { StaticMap } from "react-map-gl";
 import DeckGL from "@deck.gl/react";
 import { GeoJsonLayer, PolygonLayer } from "@deck.gl/layers";
@@ -15,9 +16,11 @@ import {
 const geoJsonPath = "./gz_2010_us_050_00_500k.json";
 // const geoJsonS3Path = "https://geojson-sm.s3.us-east-2.amazonaws.com/usa/statesAndCountiesTopo.json";
 const MAPBOX_TOKEN = process.env.REACT_APP_MAPBOX_TOKEN;
-
 // TODO: build map style selector?
 const mapStyle = "mapbox://styles/mapbox/dark-v9";
+//alasql
+const alasql = window.alasql;
+
 
 export const COLOR_SCALE = scaleThreshold()
   .domain([
@@ -85,8 +88,8 @@ const landCover = [
 function getTooltip({ object }) {
   return (
     object && {
-      html: `\
-  <div><b>tooltip</b></div>
+      html: `
+  <div><b>${object.properties.NAME} ${object.properties.LSAD}, ${object.properties.state}</b></div>
   `,
     }
   );
@@ -105,21 +108,52 @@ const USAMap = (props) => {
   });
 
   useEffect(() => {
+    if(_.isEmpty(props.usaLatestData || _.isEmpty(props.censusData))) return;
+    console.log("Props: ", props)
     setLoadingGEOJSON(true);
     async function getUSAGeoJSON() {
-      await json(geoJsonPath).then((data) => {
-        console.log("GeoJSON: ", data);
-        console.log("Mapbox: ", MAPBOX_TOKEN);
-        //format geoJSON using
+        await json(geoJsonPath).then((data) => {
+          
+          //format geoJSON
+          let c = props.censusData;
+          let u = props.usaLatestData;
+          const combinedData = alasql(
+            "SELECT c.*, u.covid_cases, u.covid_deaths FROM ? c LEFT JOIN ? u ON c.county = u.county AND c.state = u.state",
+            [c, u]
+          )
+      
+          console.log("Combined USA Data from props: ", combinedData);
+       
 
+          data.features.forEach(feature => {
+            combinedData.forEach(d => {
+              //TODO - the county number != countyfips! Will have to join on county name, and get a state number or value into the Covid data...
+              if (parseInt(feature.properties.COUNTY) === d.countyFips){
+                feature.properties.percentBlack = d.percentBlack;
+                feature.properties.covidCases = d.covid_cases;
+                feature.properties.covidDeaths = d.covid_deaths;
+                feature.properties.medianAge = d.medianAge;
+                feature.properties.medianGrossRent = d.medianGrossRent;
+                feature.properties.medianHomeValue = d.medianHomeValue;
+                feature.properties.percentNative = d.percentNative;
+                feature.properties.percentAsian = d.percentAsian;
+                feature.properties.percentWhite = d.percentWhite;
+                feature.properties.precentHispanic = d.precentHispanic;
+                feature.properties.population = d.population;
+                feature.properties.popDensity = d.popDensity;
+                feature.properties.state = d.state;
 
-
-        setGeoJSON(data);
-        setLoadingGEOJSON(false);
-      });
+              }
+            })
+                    
+          })
+          console.log("GeoJSON: ", data); 
+          setGeoJSON(data);
+          setLoadingGEOJSON(false);
+        });
     }
     getUSAGeoJSON();
-  }, [props.usaLatestData]);
+  }, [props]);
 
   const layers = [
     // only needed when using shadows - a plane for shadows to drop on
@@ -138,13 +172,12 @@ const USAMap = (props) => {
       filled: true,
       extruded: true,
       wireframe: true,
-      getElevation: (f) => Math.sqrt(f.properties.county) * 10000,
-      getFillColor: (f) => COLOR_SCALE(f.properties.growth),
+      getElevation: (f) => f.properties.covidCases *100,//Math.sqrt(f.properties.county) * 10000,
+      getFillColor: (f) => COLOR_SCALE(f.properties.percentBlack),
       getLineColor: [255, 255, 255],
       pickable: true,
     }),
   ];
-  console.log("")
   return (
     <div className="map-container" ref={mapContainerRef}>
       {loadingGeoJSON ? <p>loading</p> : <p>Map</p>}
