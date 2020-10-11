@@ -1,0 +1,15 @@
+.left-sidebar {
+    /* float: left; */
+    position: absolute;
+    width: 15%;
+    background-color: #585858;
+    height: 100vh;
+    z-index: 999;
+   -webkit-box-shadow: 21px 4px 5px -2px rgba(0,0,0,0.75);
+    -moz-box-shadow: 21px 4px 5px -2px rgba(0,0,0,0.75);
+    box-shadow: 21px 4px 5px -2px rgba(0,0,0,0.75);
+}
+.map-container {
+    float: right;
+    width: 80%;
+}

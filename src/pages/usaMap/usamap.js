@@ -9,9 +9,7 @@ import {
   AmbientLight,
   _SunLight as SunLight,
 } from "@deck.gl/core";
-// import { scaleThreshold } from "d3-scale";
-
-
+import "./usamap.css";
 
 const geoJsonPath = "./gz_2010_us_050_00_500k.json";
 // const geoJsonS3Path = "https://geojson-sm.s3.us-east-2.amazonaws.com/usa/statesAndCountiesTopo.json";
@@ -20,7 +18,6 @@ const MAPBOX_TOKEN = process.env.REACT_APP_MAPBOX_TOKEN;
 const mapStyle = "mapbox://styles/mapbox/dark-v9";
 //alasql
 const alasql = window.alasql;
-
 
 export const COLOR_SCALE = scaleThreshold()
   .domain([
@@ -89,7 +86,34 @@ function getTooltip({ object }) {
   return (
     object && {
       html: `
-  <div><b>${object.properties.NAME} ${object.properties.LSAD}, ${object.properties.state}</b></div>
+        <div><b>${object.properties.NAME} ${object.properties.LSAD}, ${
+        object.properties.state
+      }</b></div><hr style="width: 85%"/>
+        <div style="text-align:left; font-size: 15px">
+        <div><b>Covid Cases: </b>${object.properties.covidCases}</div>
+        <div><b>Covid Deaths: </b>${object.properties.covidDeaths}</div>
+        <div><b>Covid Recovered: </b>${object.properties.covidRecovered}</div>
+        <div><b>Percent African American: </b>${(
+          object.properties.percentBlack * 100
+        ).toFixed(2)}%</div>
+        <div><b>Percent Hispanic: </b>${(
+          object.properties.percentHispanic * 100
+        ).toFixed(2)}%</div>
+        <div><b>Percent Native American: </b>${(
+          object.properties.percentNative * 100
+        ).toFixed(2)}%</div>
+        <div><b>Percent Caucasian: </b>${(
+          object.properties.percentWhite * 100
+        ).toFixed(2)}%</div>
+        <div><b>Voted Trump in 2016: </b>${(
+          object.properties.percentRepublican * 100
+        ).toFixed(2)}%</div>
+        <div><b>Population: </b> ${object.properties.population}</div>
+        <div><b>Percent Covid: </b> ${(
+          (object.properties.covidCases / object.properties.population) *
+          100
+        ).toFixed(2)}%</div>
+        </div>
   `,
     }
   );
@@ -97,60 +121,66 @@ function getTooltip({ object }) {
 
 const USAMap = (props) => {
   const [loadingGeoJSON, setLoadingGEOJSON] = useState(false);
-  const [geoJSON, setGeoJSON] = useState([]);
-  // const svgRef = useRef();
+  const [geoJSON, setGeoJSON] = useState(null);
+  const [demographic, setDemographic] = useState("percentBlack");
+  const [covidProperties, setCovidProperties] = useState("covidCases");
+  // const [elevation, setElevation] = useState(null);
   const mapContainerRef = useRef();
-
+  //DeckGL
   const [effects] = useState(() => {
-    const lightingEffect = new LightingEffect({ ambientLight, dirLight });
+    const lightingEffect = new LightingEffect({
+      ambientLight,
+      dirLight,
+    });
     lightingEffect.shadowColor = [0, 0, 0, 0.5];
     return [lightingEffect];
   });
 
   useEffect(() => {
-    if(_.isEmpty(props.usaLatestData || _.isEmpty(props.censusData))) return;
-    console.log("Props: ", props)
+    if (_.isEmpty(props.usaLatestData || _.isEmpty(props.censusData))) return;
     setLoadingGEOJSON(true);
     async function getUSAGeoJSON() {
-        await json(geoJsonPath).then((data) => {
-          
-          //format geoJSON
-          let c = props.censusData;
-          let u = props.usaLatestData;
-          const combinedData = alasql(
-            "SELECT c.*, u.covid_cases, u.covid_deaths FROM ? c LEFT JOIN ? u ON c.county = u.county AND c.state = u.state",
-            [c, u]
-          )
-      
-          console.log("Combined USA Data from props: ", combinedData);
-       
+      await json(geoJsonPath).then((data) => {
+        //format geoJSON
+        let c = props.censusData;
+        let u = props.usaLatestData;
 
-          data.features.forEach(feature => {
-            combinedData.forEach(d => {
-              //TODO - the county number != countyfips! Will have to join on county name, and get a state number or value into the Covid data...
-              if (parseInt(feature.properties.COUNTY) === d.countyFips){
-                feature.properties.percentBlack = d.percentBlack;
-                feature.properties.covidCases = d.covid_cases;
-                feature.properties.covidDeaths = d.covid_deaths;
-                feature.properties.medianAge = d.medianAge;
-                feature.properties.medianGrossRent = d.medianGrossRent;
-                feature.properties.medianHomeValue = d.medianHomeValue;
-                feature.properties.percentNative = d.percentNative;
-                feature.properties.percentAsian = d.percentAsian;
-                feature.properties.percentWhite = d.percentWhite;
-                feature.properties.precentHispanic = d.precentHispanic;
-                feature.properties.population = d.population;
-                feature.properties.popDensity = d.popDensity;
-                feature.properties.state = d.state;
+        const combinedData = alasql(
+          "SELECT c.*, u.* FROM ? c LEFT JOIN ? u ON c.county = u.county AND c.state = u.state",
+          [c, u]
+        );
 
-              }
-            })
-                    
-          })
-          console.log("GeoJSON: ", data); 
-          setGeoJSON(data);
-          setLoadingGEOJSON(false);
+        // console.log("Combined USA Data from props: ", combinedData);
+
+        data.features.forEach((feature) => {
+          combinedData.forEach((d) => {
+            //TODO - the county number != countyfips! Will have to join on county name, and get a state number or value into the Covid data...
+            if (
+              parseInt(feature.properties.STATE) === d.stateNum &&
+              feature.properties.NAME === d.county
+            ) {
+              feature.properties.percentBlack = d.percentBlack;
+              feature.properties.covidCases = d.covid_cases;
+              feature.properties.covidDeaths = d.covid_deaths;
+              feature.properties.covidRecovered = d.covid_recovered;
+              feature.properties.medianAge = d.medianAge;
+              feature.properties.medianGrossRent = d.medianGrossRent;
+              feature.properties.medianHomeValue = d.medianHomeValue;
+              feature.properties.percentNative = d.percentNative;
+              feature.properties.percentAsian = d.percentAsian;
+              feature.properties.percentWhite = d.percentWhite;
+              feature.properties.percentHispanic = d.percentHispanic;
+              feature.properties.percentRepublican = d.percentRepublican;
+              feature.properties.population = d.population;
+              feature.properties.popDensity = d.popDensity;
+              feature.properties.state = d.state;
+            }
+          });
         });
+        console.log("GeoJSON: ", data);
+        setGeoJSON(data);
+        setLoadingGEOJSON(false);
+      });
     }
     getUSAGeoJSON();
   }, [props]);
@@ -172,36 +202,68 @@ const USAMap = (props) => {
       filled: true,
       extruded: true,
       wireframe: true,
-      getElevation: (f) => f.properties.covidCases *100,//Math.sqrt(f.properties.county) * 10000,
-      getFillColor: (f) => COLOR_SCALE(f.properties.percentBlack),
+      getElevation: (f) => f.properties[covidProperties] * 10,
+      getFillColor: (f) => COLOR_SCALE(Math.sqrt(f.properties[demographic])),
       getLineColor: [255, 255, 255],
       pickable: true,
     }),
   ];
+
+  //filters
+  const handleDemographicSelect = (e) => {
+    console.log("Demographic selected: ", e.target.value.toString());
+    setDemographic(e.target.value.toString());
+  };
+  const handleCovidDataSelect = (e) => {
+    console.log("Covid selected: ", e.target.value.toString());
+    setCovidProperties(e.target.value.toString());
+  };
+
   return (
-    <div className="map-container" ref={mapContainerRef}>
-      {loadingGeoJSON ? <p>loading</p> : <p>Map</p>}
-      <DeckGL
-        layers={layers}
-        effects={effects}
-        initialViewState={INITIAL_VIEW_STATE}
-        controller={true}
-        getTooltip={getTooltip}
-      >
-        <StaticMap
-          reuseMaps
-          mapStyle={mapStyle}
-          preventStyleDiffing={true}
-          mapboxApiAccessToken={MAPBOX_TOKEN}
-        />
-      </DeckGL>
+    <div ref={mapContainerRef}>
+      {/* <div className="left-sidebar">
+        {loadingGeoJSON ? <p> loading... </p> : <p>Map</p>}
+        <form>
+          <label> covid data </label>
+          <select onChange={handleCovidDataSelect}>
+            <option value="covidCases"> Cases </option>
+            <option value="covidDeaths"> Deaths </option>
+            <option value="covidRecovered"> Recovered </option>
+          </select>
+          <br />
+          <br />
+          <label> demographic </label>
+          <select onChange={handleDemographicSelect}>
+            <option value="percentBlack"> African American( % ) </option>
+            <option value="percentWhite"> White( % ) </option>
+            <option value="percentHispanic"> Hispanic( % ) </option>
+            <option value="percentNative"> Native American( % ) </option>
+            <option value="percentRepublican">
+              Voted for Trump in 2016( % )
+            </option>
+          </select>
+        </form>
+      </div> */}
+      <div className="map-container">
+        <DeckGL
+          layers={layers}
+          effects={effects}
+          initialViewState={INITIAL_VIEW_STATE}
+          controller={true}
+          getTooltip={getTooltip}
+        >
+          <StaticMap
+            reuseMaps
+            mapStyle={mapStyle}
+            preventStyleDiffing={true}
+            mapboxApiAccessToken={MAPBOX_TOKEN}
+          />{" "}
+        </DeckGL>{" "}
+      </div>{" "}
     </div>
   );
 };
 export default USAMap;
-
-
-
 
 //for D3 map
 
@@ -225,4 +287,4 @@ export default USAMap;
 // }, [geoJSON]);
 
 //return ( )
-      {/* <svg ref={svgRef}></svg> */}
+//      {/* <svg ref={svgRef}></svg> */}
